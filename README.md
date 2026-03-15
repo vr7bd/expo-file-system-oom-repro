@@ -31,6 +31,61 @@ This repo was scaffolded with `npx create-expo-app@latest`. The only changes are
 **Platform:** Android (development build)
 **Package manager:** npm
 
+> **Note on iOS:** This has only been tested on Android. The `file.md5` OOM issue (Issue 1) may also affect iOS, as the Swift implementation similarly appears to load the entire file into memory via `Data(contentsOf:)`. The JS thread blocking issue (Issue 2) affects all platforms since it is inherent to the JS-side `fetch` + `writableStream` loop.
+
+## Workaround
+
+Use the legacy API:
+
+```tsx
+import { createDownloadResumable, cacheDirectory } from 'expo-file-system/legacy';
+
+const downloadResumable = createDownloadResumable(url, cacheDirectory + 'file.apk');
+await downloadResumable.downloadAsync();
+// Do NOT access file.md5 on large files — it will OOM
+```
+
+## Environment
+
+```
+expo-env-info 2.0.11 environment info:
+  System:
+    OS: macOS 15.7.3
+    Shell: 5.9 - /bin/zsh
+  Binaries:
+    Node: 22.15.0 - ~/Library/pnpm/node
+    npm: 10.9.2 - ~/Library/pnpm/npm
+  Managers:
+    CocoaPods: 1.16.2 - /opt/homebrew/bin/pod
+  SDKs:
+    Android SDK:
+      Android NDK: 22.1.7171670
+  IDEs:
+    Android Studio: 2025.3 AI-253.30387.90.2532.14935130
+  npmPackages:
+    expo: ~55.0.6 => 55.0.6
+    react: 19.2.0 => 19.2.0
+    react-native: 0.83.2 => 0.83.2
+  Expo Workflow: bare
+```
+
+## Expo Doctor Diagnostics
+
+```
+npx expo-doctor@latest
+Running 17 checks on your project...
+16/17 checks passed. 1 checks failed. Possible issues detected:
+
+✖ Check native tooling versions
+Your Expo SDK version 55 is not compatible with Xcode 16.4.0. Required Xcode version: >=26.0.0.
+
+1 check failed, indicating possible issues with the project.
+```
+
+> Note: The Xcode warning is unrelated — this issue is Android-only and does not require Xcode.
+
+---
+
 ## Issue 1: `File.md5` reads entire file into memory
 
 ### Expected behavior
@@ -52,7 +107,9 @@ val md5: String get() {
 }
 ```
 
-### Suggested fix
+### Suggested fix (AI-generated)
+
+> **Disclaimer:** The following fix was suggested by AI and has not been tested. It is provided as a starting point for the maintainers.
 
 Use `MessageDigest.update()` in a loop to stream the hash:
 
@@ -110,54 +167,3 @@ The legacy `createDownloadResumable` remains the only option that is native-stre
 3. Doesn't cause OOM
 
 The modern API needs a native-streamed download method with abort support (e.g. an `AbortSignal` option on `File.downloadFileAsync`, or a returned handle with a `.cancel()` method) to replace the legacy `createDownloadResumable` before it can be fully retired.
-
-## Workaround
-
-Use the legacy API:
-
-```tsx
-import { createDownloadResumable, cacheDirectory } from 'expo-file-system/legacy';
-
-const downloadResumable = createDownloadResumable(url, cacheDirectory + 'file.apk');
-await downloadResumable.downloadAsync();
-// Do NOT access file.md5 on large files — it will OOM
-```
-
-## Environment
-
-```
-expo-env-info 2.0.11 environment info:
-  System:
-    OS: macOS 15.7.3
-    Shell: 5.9 - /bin/zsh
-  Binaries:
-    Node: 22.15.0 - ~/Library/pnpm/node
-    npm: 10.9.2 - ~/Library/pnpm/npm
-  Managers:
-    CocoaPods: 1.16.2 - /opt/homebrew/bin/pod
-  SDKs:
-    Android SDK:
-      Android NDK: 22.1.7171670
-  IDEs:
-    Android Studio: 2025.3 AI-253.30387.90.2532.14935130
-  npmPackages:
-    expo: ~55.0.6 => 55.0.6
-    react: 19.2.0 => 19.2.0
-    react-native: 0.83.2 => 0.83.2
-  Expo Workflow: bare
-```
-
-## Expo Doctor Diagnostics
-
-```
-npx expo-doctor@latest
-Running 17 checks on your project...
-16/17 checks passed. 1 checks failed. Possible issues detected:
-
-✖ Check native tooling versions
-Your Expo SDK version 55 is not compatible with Xcode 16.4.0. Required Xcode version: >=26.0.0.
-
-1 check failed, indicating possible issues with the project.
-```
-
-> Note: The Xcode warning is unrelated — this issue is Android-only and does not require Xcode.
